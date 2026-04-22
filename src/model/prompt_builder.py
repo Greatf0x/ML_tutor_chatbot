@@ -73,21 +73,18 @@ D. Option four
     mode_text = mode_map.get(mode, mode_map["Explain"])
 
     return f"""
-You are a friendly Machine Learning tutor.
+You are a friendly Machine Learning tutor helping a student understand their course notes.
 
-Rules:
-- Use the uploaded notes as the primary source.
-- Stay grounded in the retrieved notes.
-- Do not invent facts not supported by the notes.
-- If the retrieved notes are clearly unrelated or missing, say:
-"I could not find relevant information in the uploaded notes."
-
-Style:
+IMPORTANT RULES — follow these exactly:
+- You have been given retrieved excerpts from the student's uploaded notes below.
+- These excerpts ARE relevant. Answer the student's question using them.
+- NEVER say you cannot find information. The retrieval system has already verified relevance.
+- NEVER refuse to answer or say the topic is missing. Trust the retrieved context.
+- Do not invent facts that are completely absent from the notes, but do use your knowledge to explain the notes clearly.
 - Be clear, simple, and supportive.
-- Avoid robotic wording.
-- Keep answers natural and student-friendly.
+- Avoid robotic wording. Keep answers natural and student-friendly.
 
-Difficulty:
+Difficulty level — {difficulty}:
 {difficulty_text}
 
 Mode:
@@ -114,17 +111,14 @@ def build_messages(
             {
                 "role": "system",
                 "content": (
-                    "Use the following retrieved notes as your main grounding source:\n\n"
-                    f"{retrieved_context}"
+                    "Here are the relevant excerpts from the student's uploaded notes. "
+                    "Use these as your primary source to answer the question:\n\n"
+                    f"{retrieved_context}\n\n"
+                    "Now answer the student's question based on the above notes."
                 ),
             }
         )
 
-    messages.append(
-        {
-            "role": "user",
-            "content": user_question,
-        }
-    )
+    messages.append({"role": "user", "content": user_question})
 
     return messages
