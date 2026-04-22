@@ -1,5 +1,4 @@
 from pathlib import Path
-from pypdf import PdfReader
 import docx
 
 
@@ -22,17 +21,20 @@ def load_text_from_file(file_path: str) -> str:
 
 
 def load_pdf(file_path: str) -> str:
-    reader = PdfReader(file_path)
+    import pdfplumber
     text_parts = []
 
-    for page in reader.pages:
-        page_text = page.extract_text(extraction_mode="layout")
-        if not page_text:
-            page_text = page.extract_text()
-        if page_text:
-            text_parts.append(page_text)
+    with pdfplumber.open(file_path) as pdf:
+        for page in pdf.pages:
+            # Extract with layout=True to preserve word spacing
+            text = page.extract_text(layout=True)
+            if not text:
+                # Fallback for pages where layout mode returns nothing
+                text = page.extract_text()
+            if text:
+                text_parts.append(text)
 
-    return "\n".join(text_parts)
+    return "\n\n".join(text_parts)
 
 
 def load_docx(file_path: str) -> str:

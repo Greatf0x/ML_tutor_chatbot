@@ -15,8 +15,15 @@ from src.rag.chunker import chunk_text
 from src.rag.loader import load_text_from_file
 from src.utils.config import CONFIG
 
+# ── Move this to the TOP so it is always defined before any function uses it ──
 
-STRICT_NO_MATCH_RESPONSE = "I could not find relevant information in the uploaded notes."
+STRICT_NO_MATCH_RESPONSE = (
+    "I couldn’t find information about that in your uploaded notes. "
+    "Please ask something covered in the material you uploaded, "
+    "or upload notes that include this topic."
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 def response_token_budget(mode: str) -> int:
@@ -109,7 +116,6 @@ def clear_chat() -> None:
     st.session_state.copied_message_text = None
     st.session_state.copied_message_id = None
     st.session_state.next_message_id = 1
-    reset_notes()
 
 
 def process_uploaded_file(uploaded_file: Any) -> None:
@@ -143,11 +149,20 @@ def process_uploaded_file(uploaded_file: Any) -> None:
         st.session_state.loaded_filename = uploaded_file.name
         st.success(f"Loaded notes: {uploaded_file.name}")
         st.info(f"Created {len(chunks)} chunks")
+        st.rerun()
     except Exception as exc:
         st.error(f"Failed to load file: {exc}")
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+
+def normalize_query(text: str) -> str:
+    cleaned = text.lower().strip()
+    for ch in ["?", ".", ",", "!", ":", ";", "(", ")", "[", "]", "{", "}", '"', "'"]:
+        cleaned = cleaned.replace(ch, "")
+    cleaned = " ".join(cleaned.split())
+    return cleaned
 
 
 def prepare_chat_request(
@@ -159,8 +174,11 @@ def prepare_chat_request(
     source_snippets: list[str] = []
     retrieved_context = None
 
+    query_text = (retrieval_query or question).strip()
+
     print("\n========== PREPARE CHAT REQUEST ==========")
     print("QUESTION:", question)
+    print("RETRIEVAL QUERY:", query_text)
     print("NOTES LOADED:", st.session_state.notes_loaded)
     print("RETRIEVER IS NONE:", st.session_state.retriever is None)
 
@@ -169,17 +187,30 @@ def prepare_chat_request(
         print("==========================================\n")
         return None, [], True
 
-    source_snippets = st.session_state.retriever.retrieve(
-        retrieval_query or question,
-        top_k=3
-    )
+    # 1st try: original query
+    source_snippets = st.session_state.retriever.retrieve(query_text, top_k=3)
+
+    # 2nd try: normalized query
+    if not source_snippets:
+        normalized = normalize_query(query_text)
+        print("RETRY WITH NORMALIZED QUERY:", normalized)
+        source_snippets = st.session_state.retriever.retrieve(normalized, top_k=3)
+
+    # 3rd try: shorter keyword-style query
+    if not source_snippets:
+        fallback_terms = normalize_query(query_text).split()
+        fallback_query = " ".join(fallback_terms[:4])
+        print("RETRY WITH FALLBACK QUERY:", fallback_query)
+        source_snippets = st.session_state.retriever.retrieve(fallback_query, top_k=5)
 
     print("RETRIEVED SNIPPETS COUNT:", len(source_snippets))
 
+    # ── If nothing passed the similarity threshold → refuse ──────────────────
     if not source_snippets:
-        print("REFUSAL REASON: no source snippets retrieved")
+        print("REFUSAL REASON: no snippets passed similarity threshold")
         print("==========================================\n")
         return None, [], True
+    # ─────────────────────────────────────────────────────────────────────────
 
     for i, snippet in enumerate(source_snippets, start=1):
         print(f"\n--- SNIPPET {i} ---\n{snippet[:500]}")
@@ -489,13 +520,14 @@ def render_main_panel(
     active_tab: str,
 ) -> None:
     ui.render_main_panel(CONFIG.app_icon, CONFIG.app_title)
-    render_chat_tab(model_name, difficulty, mode, temperature)
 
+    # ✅ Process upload FIRST before chat renders
     if active_tab == "Upload":
         render_upload_tab()
     elif active_tab == "Settings":
         render_settings_tab(model_name, difficulty, mode, temperature)
 
+    render_chat_tab(model_name, difficulty, mode, temperature)
     ui.close_main_panel()
 
 

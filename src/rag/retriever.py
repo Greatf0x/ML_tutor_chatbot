@@ -1,16 +1,15 @@
-import re
-
 import chromadb
 from chromadb.config import Settings
 
 from src.rag.embedder import Embedder
 
-
-def normalize_text(text: str) -> str:
-    text = text.lower().strip()
-    text = re.sub(r"[^\w\s]", " ", text)
-    text = re.sub(r"\s+", " ", text)
-    return text
+# ── Tuning knob ──────────────────────────────────────────────────────────────
+# ChromaDB uses L2 distance: 0 = identical, higher = less similar.
+# Chunks whose distance is ABOVE this value are treated as "not in the notes".
+# Lower  → stricter  (fewer answers, safer)
+# Higher → looser    (more answers, risks hallucination)
+SIMILARITY_THRESHOLD = 1.2  # tuned for all-MiniLM-L6-v2 normalized vectors (L2 range 0–2)
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 class SimpleRetriever:
@@ -36,13 +35,7 @@ class SimpleRetriever:
             embeddings=embeddings,
         )
 
-    def retrieve(
-        self,
-        query: str,
-        top_k: int = 3,
-        max_distance: float = 1.20,
-        min_keyword_overlap: int = 1,
-    ) -> list[str]:
+    def retrieve(self, query: str, top_k: int = 3) -> list[str]:
         query_embedding = self.embedder.encode_query(query)
 
         results = self.collection.query(
@@ -60,21 +53,14 @@ class SimpleRetriever:
         if not docs or not docs[0]:
             return []
 
-        query_words = set(normalize_text(query).split())
-        filtered_docs: list[str] = []
+        # ── NEW: filter out chunks that are too dissimilar ────────────────────
+        filtered = [
+            doc
+            for doc, dist in zip(docs[0], distances[0])
+            if dist <= SIMILARITY_THRESHOLD
+        ]
 
-        for doc, distance in zip(docs[0], distances[0]):
-            normalized_doc = normalize_text(doc)
-            doc_words = set(normalized_doc.split())
-            overlap = len(query_words & doc_words)
+        print(f"DEBUG: {len(docs[0])} chunks retrieved, "
+              f"{len(filtered)} passed threshold ({SIMILARITY_THRESHOLD})")
 
-            print("\nDOC PREVIEW:", doc[:250])
-            print("DISTANCE:", distance)
-            print("KEYWORD OVERLAP:", overlap)
-
-            if distance is not None and distance <= max_distance:
-                filtered_docs.append(doc)
-            elif overlap >= min_keyword_overlap:
-                filtered_docs.append(doc)
-
-        return filtered_docs
+        return filtered
