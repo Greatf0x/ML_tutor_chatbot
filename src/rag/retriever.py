@@ -1,7 +1,16 @@
+import re
+
 import chromadb
 from chromadb.config import Settings
 
 from src.rag.embedder import Embedder
+
+
+def normalize_text(text: str) -> str:
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text
 
 
 class SimpleRetriever:
@@ -27,7 +36,13 @@ class SimpleRetriever:
             embeddings=embeddings,
         )
 
-    def retrieve(self, query: str, top_k: int = 1, max_distance: float = 1.2) -> list[str]:
+    def retrieve(
+        self,
+        query: str,
+        top_k: int = 3,
+        max_distance: float = 1.20,
+        min_keyword_overlap: int = 1,
+    ) -> list[str]:
         query_embedding = self.embedder.encode_query(query)
 
         results = self.collection.query(
@@ -39,12 +54,27 @@ class SimpleRetriever:
         docs = results.get("documents", [[]])
         distances = results.get("distances", [[]])
 
+        print("\nDEBUG QUERY:", query)
+        print("DEBUG DISTANCES:", distances)
+
         if not docs or not docs[0]:
             return []
 
-        filtered_docs = []
+        query_words = set(normalize_text(query).split())
+        filtered_docs: list[str] = []
+
         for doc, distance in zip(docs[0], distances[0]):
+            normalized_doc = normalize_text(doc)
+            doc_words = set(normalized_doc.split())
+            overlap = len(query_words & doc_words)
+
+            print("\nDOC PREVIEW:", doc[:250])
+            print("DISTANCE:", distance)
+            print("KEYWORD OVERLAP:", overlap)
+
             if distance is not None and distance <= max_distance:
+                filtered_docs.append(doc)
+            elif overlap >= min_keyword_overlap:
                 filtered_docs.append(doc)
 
         return filtered_docs

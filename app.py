@@ -126,8 +126,18 @@ def process_uploaded_file(uploaded_file: Any) -> None:
     try:
         text = load_text_from_file(temp_path)
         chunks = chunk_text(text)
+
+        print("\n========== FILE DEBUG ==========")
+        print("LOADED FILE:", uploaded_file.name)
+        print("EXTRACTED TEXT PREVIEW:\n", text[:2000])
+        print("NUMBER OF CHUNKS:", len(chunks))
+        if chunks:
+            print("FIRST CHUNK:\n", chunks[0][:1000])
+        print("================================\n")
+
         if st.session_state.retriever is None:
             st.session_state.retriever = create_retriever()
+
         st.session_state.retriever.add_chunks(chunks)
         st.session_state.notes_loaded = True
         st.session_state.loaded_filename = uploaded_file.name
@@ -146,24 +156,35 @@ def prepare_chat_request(
     mode: str,
     retrieval_query: str | None = None,
 ) -> tuple[list[dict[str, str]] | None, list[str], bool]:
-    """
-    Returns:
-        messages | None
-        source_snippets
-        should_refuse (True if strict no-match response should be returned)
-    """
     source_snippets: list[str] = []
     retrieved_context = None
 
+    print("\n========== PREPARE CHAT REQUEST ==========")
+    print("QUESTION:", question)
+    print("NOTES LOADED:", st.session_state.notes_loaded)
+    print("RETRIEVER IS NONE:", st.session_state.retriever is None)
+
     if not st.session_state.notes_loaded or st.session_state.retriever is None:
+        print("REFUSAL REASON: notes not loaded or retriever missing")
+        print("==========================================\n")
         return None, [], True
 
-    source_snippets = st.session_state.retriever.retrieve(retrieval_query or question, top_k=1)
+    source_snippets = st.session_state.retriever.retrieve(
+        retrieval_query or question,
+        top_k=3
+    )
+
+    print("RETRIEVED SNIPPETS COUNT:", len(source_snippets))
 
     if not source_snippets:
+        print("REFUSAL REASON: no source snippets retrieved")
+        print("==========================================\n")
         return None, [], True
 
-    shortened_snippets = [snippet[:600] for snippet in source_snippets]
+    for i, snippet in enumerate(source_snippets, start=1):
+        print(f"\n--- SNIPPET {i} ---\n{snippet[:500]}")
+
+    shortened_snippets = [snippet[:800] for snippet in source_snippets]
     retrieved_context = "\n\n---\n\n".join(shortened_snippets)
 
     recent_history = st.session_state.chat_history[-4:]
@@ -175,6 +196,10 @@ def prepare_chat_request(
         chat_history=recent_history,
         retrieved_context=retrieved_context,
     )
+
+    print("MESSAGE BUILD SUCCESS")
+    print("==========================================\n")
+
     return messages, source_snippets, False
 
 

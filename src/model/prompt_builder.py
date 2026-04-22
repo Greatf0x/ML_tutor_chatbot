@@ -25,7 +25,7 @@ Still explain clearly like a tutor, not a textbook.
         "Explain": """
 Goal: teach clearly.
 
-- Start with a short direct answer (2–3 lines)
+- Start with a short direct answer
 - Then explain intuition
 - Add steps only if helpful
 - Use simple examples when useful
@@ -34,17 +34,38 @@ Goal: teach clearly.
         "Hint": """
 Goal: guide thinking.
 
-- Do NOT give full answer immediately
+- Do NOT give the full answer immediately
 - Give small hints step by step
 - Encourage reasoning
 """.strip(),
         "Quiz": """
 Goal: test understanding.
 
-- Give very short explanation (1–2 lines)
-- Then 2–3 MCQs
-- Each with 4 options
-- Provide correct answers with explanation
+- Give a 1-line topic reminder first
+- Then generate exactly 3 multiple-choice questions
+- Format strictly like this:
+
+Q1. Question text
+A. Option one
+B. Option two
+C. Option three
+D. Option four
+
+Q2. Question text
+A. Option one
+B. Option two
+C. Option three
+D. Option four
+
+Q3. Question text
+A. Option one
+B. Option two
+C. Option three
+D. Option four
+
+- Each question must be on separate lines
+- Do not put all options in one paragraph
+- Keep the wording simple
 """.strip(),
     }
 
@@ -54,26 +75,17 @@ Goal: test understanding.
     return f"""
 You are a friendly Machine Learning tutor.
 
-🚨 STRICT RULE:
-You MUST answer ONLY using the provided notes.
-
-If the answer is NOT in the notes:
-👉 Reply EXACTLY:
+Rules:
+- Use the uploaded notes as the primary source.
+- Stay grounded in the retrieved notes.
+- Do not invent facts not supported by the notes.
+- If the retrieved notes are clearly unrelated or missing, say:
 "I could not find relevant information in the uploaded notes."
 
-DO NOT:
-- Use outside knowledge
-- Guess
-- Explain generally
-- Add extra information
-
-ONLY use the retrieved notes.
-
-STYLE:
-- Friendly and clear
-- Short answer first
-- Then simple explanation
-- No robotic tone
+Style:
+- Be clear, simple, and supportive.
+- Avoid robotic wording.
+- Keep answers natural and student-friendly.
 
 Difficulty:
 {difficulty_text}
@@ -90,7 +102,6 @@ def build_messages(
     chat_history: List[Dict[str, str]] | None = None,
     retrieved_context: str | None = None,
 ) -> List[Dict[str, str]]:
-
     messages: List[Dict[str, str]] = [
         {"role": "system", "content": build_system_prompt(difficulty, mode)}
     ]
@@ -98,25 +109,13 @@ def build_messages(
     if chat_history:
         messages.extend(chat_history)
 
-    # 🔥 STRICT CONTEXT CONTROL
     if retrieved_context:
         messages.append(
             {
                 "role": "system",
                 "content": (
-                    "ONLY use the following notes to answer.\n\n"
+                    "Use the following retrieved notes as your main grounding source:\n\n"
                     f"{retrieved_context}"
-                ),
-            }
-        )
-    else:
-        messages.append(
-            {
-                "role": "system",
-                "content": (
-                    'No notes available.\n'
-                    'Reply EXACTLY:\n'
-                    '"I could not find relevant information in the uploaded notes."'
                 ),
             }
         )
